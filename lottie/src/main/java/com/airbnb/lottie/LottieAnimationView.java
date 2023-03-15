@@ -7,6 +7,7 @@ import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.ColorFilter;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Parcel;
@@ -37,6 +38,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -179,8 +181,15 @@ import java.util.Set;
       setClipToCompositionBounds(ta.getBoolean(R.styleable.LottieAnimationView_lottie_clipToCompositionBounds, true));
     }
 
+    if (ta.hasValue(R.styleable.LottieAnimationView_lottie_defaultFontFileExtension)) {
+      setDefaultFontFileExtension(ta.getString(R.styleable.LottieAnimationView_lottie_defaultFontFileExtension));
+    }
+
     setImageAssetsFolder(ta.getString(R.styleable.LottieAnimationView_lottie_imageAssetsFolder));
-    setProgress(ta.getFloat(R.styleable.LottieAnimationView_lottie_progress, 0));
+
+    boolean hasProgress = ta.hasValue(R.styleable.LottieAnimationView_lottie_progress);
+    setProgressInternal(ta.getFloat(R.styleable.LottieAnimationView_lottie_progress, 0f), hasProgress);
+
     enableMergePathsForKitKatAndAbove(ta.getBoolean(
         R.styleable.LottieAnimationView_lottie_enableMergePathsForKitKatAndAbove, false));
     if (ta.hasValue(R.styleable.LottieAnimationView_lottie_colorFilter)) {
@@ -206,6 +215,10 @@ import java.util.Set;
             false
         )
     );
+
+    if (ta.hasValue(R.styleable.LottieAnimationView_lottie_useCompositionFrameRate)) {
+      setUseCompositionFrameRate(ta.getBoolean(R.styleable.LottieAnimationView_lottie_useCompositionFrameRate, false));
+    }
 
     ta.recycle();
 
@@ -290,7 +303,7 @@ import java.util.Set;
       setAnimation(animationResId);
     }
     if (!userActionsTaken.contains(UserActionTaken.SET_PROGRESS)) {
-      setProgress(ss.progress);
+      setProgressInternal(ss.progress, false);
     }
     if (!userActionsTaken.contains(UserActionTaken.PLAY_OPTION) && ss.isAnimating) {
       playAnimation();
@@ -325,6 +338,19 @@ import java.util.Set;
   }
 
   /**
+   * Lottie files can specify a target frame rate. By default, Lottie ignores it and re-renders
+   * on every frame. If that behavior is undesirable, you can set this to true to use the composition
+   * frame rate instead.
+   * <p>
+   * Note: composition frame rates are usually lower than display frame rates
+   * so this will likely make your animation feel janky. However, it may be desirable
+   * for specific situations such as pixel art that are intended to have low frame rates.
+   */
+  public void setUseCompositionFrameRate(boolean useCompositionFrameRate) {
+    lottieDrawable.setUseCompositionFrameRate(useCompositionFrameRate);
+  }
+
+  /**
    * Enable this to get merge path support for devices running KitKat (19) and above.
    * <p>
    * Merge paths currently don't work if the the operand shape is entirely contained within the
@@ -344,9 +370,9 @@ import java.util.Set;
 
   /**
    * Sets whether or not Lottie should clip to the original animation composition bounds.
-   *
+   * <p>
    * When set to true, the parent view may need to disable clipChildren so Lottie can render outside of the LottieAnimationView bounds.
-   *
+   * <p>
    * Defaults to true.
    */
   public void setClipToCompositionBounds(boolean clipToCompositionBounds) {
@@ -355,7 +381,7 @@ import java.util.Set;
 
   /**
    * Gets whether or not Lottie should clip to the original animation composition bounds.
-   *
+   * <p>
    * Defaults to true.
    */
   public boolean getClipToCompositionBounds() {
@@ -854,7 +880,7 @@ import java.util.Set;
   /**
    * When true, dynamically set bitmaps will be drawn with the exact bounds of the original animation, regardless of the bitmap size.
    * When false, dynamically set bitmaps will be drawn at the top left of the original image but with its own bounds.
-   *
+   * <p>
    * Defaults to false.
    */
   public void setMaintainOriginalImageBounds(boolean maintainOriginalImageBounds) {
@@ -864,7 +890,7 @@ import java.util.Set;
   /**
    * When true, dynamically set bitmaps will be drawn with the exact bounds of the original animation, regardless of the bitmap size.
    * When false, dynamically set bitmaps will be drawn at the top left of the original image but with its own bounds.
-   *
+   * <p>
    * Defaults to false.
    */
   public boolean getMaintainOriginalImageBounds() {
@@ -898,10 +924,40 @@ import java.util.Set;
   }
 
   /**
+   * By default, Lottie will look in src/assets/fonts/FONT_NAME.ttf
+   * where FONT_NAME is the fFamily specified in your Lottie file.
+   * If your fonts have a different extension, you can override the
+   * default here.
+   * <p>
+   * Alternatively, you can use {@link #setFontAssetDelegate(FontAssetDelegate)}
+   * for more control.
+   *
+   * @see #setFontAssetDelegate(FontAssetDelegate)
+   */
+  public void setDefaultFontFileExtension(String extension) {
+    lottieDrawable.setDefaultFontFileExtension(extension);
+  }
+
+  /**
    * Use this to manually set fonts.
    */
   public void setFontAssetDelegate(FontAssetDelegate assetDelegate) {
     lottieDrawable.setFontAssetDelegate(assetDelegate);
+  }
+
+  /**
+   * Set a map from font name keys to Typefaces.
+   * The keys can be in the form:
+   * * fontFamily
+   * * fontFamily-fontStyle
+   * * fontName
+   * All 3 are defined as fName, fFamily, and fStyle in the Lottie file.
+   * <p>
+   * If you change a value in fontMap, create a new map or call
+   * {@link #invalidate()}. Setting the same map again will noop.
+   */
+  public void setFontMap(@Nullable Map<String, Typeface> fontMap) {
+    lottieDrawable.setFontMap(fontMap);
   }
 
   /**
@@ -977,7 +1033,15 @@ import java.util.Set;
   }
 
   public void setProgress(@FloatRange(from = 0f, to = 1f) float progress) {
-    userActionsTaken.add(UserActionTaken.SET_PROGRESS);
+    setProgressInternal(progress, true);
+  }
+
+  private void setProgressInternal(
+      @FloatRange(from = 0f, to = 1f) float progress,
+      boolean fromUser) {
+    if (fromUser) {
+      userActionsTaken.add(UserActionTaken.SET_PROGRESS);
+    }
     lottieDrawable.setProgress(progress);
   }
 
@@ -1022,7 +1086,7 @@ import java.util.Set;
    * Call this to set whether or not to render with hardware or software acceleration.
    * Lottie defaults to Automatic which will use hardware acceleration unless:
    * 1) There are dash paths and the device is pre-Pie.
-   * 2) There are more than 4 masks and mattes and the device is pre-Pie.
+   * 2) There are more than 4 masks and mattes.
    * Hardware acceleration is generally faster for those devices unless
    * there are many large mattes and masks in which case there is a lot
    * of GPU uploadTexture thrashing which makes it much slower.

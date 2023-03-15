@@ -11,7 +11,9 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.rule.GrantPermissionRule
+import com.airbnb.lottie.Lottie
 import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieConfig
 import com.airbnb.lottie.model.LottieCompositionCache
 import com.airbnb.lottie.snapshots.tests.ApplyOpacityToLayerTestCase
 import com.airbnb.lottie.snapshots.tests.AssetsTestCase
@@ -19,6 +21,7 @@ import com.airbnb.lottie.snapshots.tests.ClipChildrenTestCase
 import com.airbnb.lottie.snapshots.tests.ColorStateListColorFilterTestCase
 import com.airbnb.lottie.snapshots.tests.ComposeDynamicPropertiesTestCase
 import com.airbnb.lottie.snapshots.tests.ComposeScaleTypesTestCase
+import com.airbnb.lottie.snapshots.tests.CompositionFrameRate
 import com.airbnb.lottie.snapshots.tests.CustomBoundsTestCase
 import com.airbnb.lottie.snapshots.tests.DynamicPropertiesTestCase
 import com.airbnb.lottie.snapshots.tests.FailureTestCase
@@ -30,6 +33,7 @@ import com.airbnb.lottie.snapshots.tests.OutlineMasksAndMattesTestCase
 import com.airbnb.lottie.snapshots.tests.PartialFrameProgressTestCase
 import com.airbnb.lottie.snapshots.tests.ProdAnimationsTestCase
 import com.airbnb.lottie.snapshots.tests.ScaleTypesTestCase
+import com.airbnb.lottie.snapshots.tests.SeekBarTestCase
 import com.airbnb.lottie.snapshots.tests.SoftwareRenderingDynamicPropertiesInvalidationTestCase
 import com.airbnb.lottie.snapshots.tests.TextTestCase
 import com.airbnb.lottie.snapshots.utils.BitmapPool
@@ -39,6 +43,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -61,12 +68,36 @@ class LottieSnapshotTest {
 
     lateinit var testCaseContext: SnapshotTestCaseContext
     lateinit var snapshotter: HappoSnapshotter
+    private lateinit var s3AccessKey: String
+    private lateinit var s3SecretKey: String
 
     @Before
     fun setup() {
         LottieCompositionCache.getInstance().resize(1)
+        Lottie.initialize(
+            LottieConfig.Builder()
+                .setDisablePathInterpolatorCache(true)
+                .build()
+        )
         val context = ApplicationProvider.getApplicationContext<Context>()
-        snapshotter = HappoSnapshotter(context) { name, variant ->
+        s3AccessKey = BuildConfig.S3AccessKey
+        s3SecretKey = BuildConfig.S3SecretKey
+        var happoApiKey = BuildConfig.HappoApiKey
+        var happoSecretKey = BuildConfig.HappoSecretKey
+        @Suppress("KotlinConstantConditions")
+        if (BuildConfig.S3AccessKey == "" || BuildConfig.S3AccessKey == "null") {
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("https://us-central1-lottie-snapshots.cloudfunctions.net/snapshot-env-v1/snapshots")
+                .build()
+            val response = client.newCall(request).execute()
+            val json = JSONObject(response.body?.string() ?: "{}")
+            s3AccessKey = json.getString("LOTTIE_S3_API_KEY")
+            s3SecretKey = json.getString("LOTTIE_S3_SECRET_KEY")
+            happoApiKey = json.getString("LOTTIE_HAPPO_API_KEY")
+            happoSecretKey = json.getString("LOTTIE_HAPPO_SECRET_KEY")
+        }
+        snapshotter = HappoSnapshotter(context, s3AccessKey, s3SecretKey, happoApiKey, happoSecretKey) { name, variant ->
             snapshotActivityRule.scenario.onActivity { activity ->
                 activity.updateUiForSnapshot(name, variant)
             }
@@ -124,9 +155,11 @@ class LottieSnapshotTest {
             OutlineMasksAndMattesTestCase(),
             LargeCompositionSoftwareRendering(),
             ComposeDynamicPropertiesTestCase(),
-            ProdAnimationsTestCase(),
+            ProdAnimationsTestCase(s3AccessKey, s3SecretKey),
             ClipChildrenTestCase(),
             SoftwareRenderingDynamicPropertiesInvalidationTestCase(),
+            SeekBarTestCase(),
+            CompositionFrameRate(),
         )
 
         withTimeout(TimeUnit.MINUTES.toMillis(45)) {

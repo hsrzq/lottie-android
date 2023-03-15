@@ -144,12 +144,15 @@ suspend fun SnapshotTestCaseContext.snapshotComposition(
     val filmStripView = filmStripViewPool.acquire()
     filmStripView.setOutlineMasksAndMattes(false)
     filmStripView.setApplyingOpacityToLayersEnabled(false)
+    filmStripView.setUseCompositionFrameRate(false)
     filmStripView.setImageAssetDelegate { BitmapFactory.decodeResource(context.resources, R.drawable.airbnb) }
-    filmStripView.setFontAssetDelegate(object : FontAssetDelegate() {
-        override fun getFontPath(fontFamily: String?, fontStyle: String?, fontName: String?): String {
-            return "fonts/Roboto.ttf"
-        }
-    })
+    if (composition.characters.isEmpty) {
+        filmStripView.setFontAssetDelegate(object : FontAssetDelegate() {
+            override fun getFontPath(fontFamily: String?, fontStyle: String?, fontName: String?): String {
+                return "fonts/Roboto.ttf"
+            }
+        })
+    }
     callback?.invoke(filmStripView)
     val spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
     filmStripView.measure(spec, spec)

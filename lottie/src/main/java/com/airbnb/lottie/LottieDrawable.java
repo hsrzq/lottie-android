@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * This can be used to show an lottie animation in any place that would normally take a drawable.
@@ -106,6 +107,14 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
   private ImageAssetDelegate imageAssetDelegate;
   @Nullable
   private FontAssetManager fontAssetManager;
+  @Nullable
+  private Map<String, Typeface> fontMap;
+  /**
+   * Will be set if manually overridden by {@link #setDefaultFontFileExtension(String)}.
+   * This must be stored as a field in case it is set before the font asset delegate
+   * has been created.
+   */
+  @Nullable String defaultFontFileExtension;
   @Nullable
   FontAssetDelegate fontAssetDelegate;
   @Nullable
@@ -216,7 +225,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
 
   /**
    * Sets whether or not Lottie should clip to the original animation composition bounds.
-   *
+   * <p>
    * Defaults to true.
    */
   public void setClipToCompositionBounds(boolean clipToCompositionBounds) {
@@ -232,7 +241,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
 
   /**
    * Gets whether or not Lottie should clip to the original animation composition bounds.
-   *
+   * <p>
    * Defaults to true.
    */
   public boolean getClipToCompositionBounds() {
@@ -1001,6 +1010,19 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
   }
 
   /**
+   * Lottie files can specify a target frame rate. By default, Lottie ignores it and re-renders
+   * on every frame. If that behavior is undesirable, you can set this to true to use the composition
+   * frame rate instead.
+   * <p>
+   * Note: composition frame rates are usually lower than display frame rates
+   * so this will likely make your animation feel janky. However, it may be desirable
+   * for specific situations such as pixel art that are intended to have low frame rates.
+   */
+  public void setUseCompositionFrameRate(boolean useCompositionFrameRate) {
+    animator.setUseCompositionFrameRate(useCompositionFrameRate);
+  }
+
+  /**
    * Use this if you can't bundle images with your app. This may be useful if you download the
    * animations from the network or have the images saved to an SD Card. In that case, Lottie
    * will defer the loading of the bitmap to this delegate.
@@ -1008,7 +1030,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
    * Be wary if you are using many images, however. Lottie is designed to work with vector shapes
    * from After Effects. If your images look like they could be represented with vector shapes,
    * see if it is possible to convert them to shape layers and re-export your animation. Check
-   * the documentation at http://airbnb.io/lottie for more information about importing shapes from
+   * the documentation at <a href="http://airbnb.io/lottie">http://airbnb.io/lottie</a> for more information about importing shapes from
    * Sketch or Illustrator to avoid this.
    */
   public void setImageAssetDelegate(ImageAssetDelegate assetDelegate) {
@@ -1028,6 +1050,25 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
     }
   }
 
+  /**
+   * Set a map from font name keys to Typefaces.
+   * The keys can be in the form:
+   * * fontFamily
+   * * fontFamily-fontStyle
+   * * fontName
+   * All 3 are defined as fName, fFamily, and fStyle in the Lottie file.
+   * <p>
+   * If you change a value in fontMap, create a new map or call
+   * {@link #invalidateSelf()}. Setting the same map again will noop.
+   */
+  public void setFontMap(@Nullable Map<String, Typeface> fontMap) {
+    if (fontMap == this.fontMap) {
+      return;
+    }
+    this.fontMap = fontMap;
+    invalidateSelf();
+  }
+
   public void setTextDelegate(@SuppressWarnings("NullableProblems") TextDelegate textDelegate) {
     this.textDelegate = textDelegate;
   }
@@ -1038,7 +1079,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
   }
 
   public boolean useTextGlyphs() {
-    return textDelegate == null && composition.getCharacters().size() > 0;
+    return fontMap == null && textDelegate == null && composition.getCharacters().size() > 0;
   }
 
   public LottieComposition getComposition() {
@@ -1227,11 +1268,6 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
   }
 
   private ImageAssetManager getImageAssetManager() {
-    if (getCallback() == null) {
-      // We can't get a bitmap since we can't get a Context from the callback.
-      return null;
-    }
-
     if (imageAssetManager != null && !imageAssetManager.hasSameContext(getContext())) {
       imageAssetManager = null;
     }
@@ -1247,6 +1283,22 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
   @Nullable
   @RestrictTo(RestrictTo.Scope.LIBRARY)
   public Typeface getTypeface(Font font) {
+    Map<String, Typeface> fontMap = this.fontMap;
+    if (fontMap != null) {
+      String key = font.getFamily();
+      if (fontMap.containsKey(key)) {
+        return fontMap.get(key);
+      }
+      key = font.getName();
+      if (fontMap.containsKey(key)) {
+        return fontMap.get(key);
+      }
+      key = font.getFamily() + "-" + font.getStyle();
+      if (fontMap.containsKey(key)) {
+        return fontMap.get(key);
+      }
+    }
+
     FontAssetManager assetManager = getFontAssetManager();
     if (assetManager != null) {
       return assetManager.getTypeface(font);
@@ -1262,9 +1314,32 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
 
     if (fontAssetManager == null) {
       fontAssetManager = new FontAssetManager(getCallback(), fontAssetDelegate);
+      String defaultExtension = this.defaultFontFileExtension;
+      if (defaultExtension != null) {
+        fontAssetManager.setDefaultFontFileExtension(defaultFontFileExtension);
+      }
     }
 
     return fontAssetManager;
+  }
+
+  /**
+   * By default, Lottie will look in src/assets/fonts/FONT_NAME.ttf
+   * where FONT_NAME is the fFamily specified in your Lottie file.
+   * If your fonts have a different extension, you can override the
+   * default here.
+   * <p>
+   * Alternatively, you can use {@link #setFontAssetDelegate(FontAssetDelegate)}
+   * for more control.
+   *
+   * @see #setFontAssetDelegate(FontAssetDelegate)
+   */
+  public void setDefaultFontFileExtension(String extension) {
+    defaultFontFileExtension = extension;
+    FontAssetManager fam = getFontAssetManager();
+    if (fam != null) {
+      fam.setDefaultFontFileExtension(extension);
+    }
   }
 
   @Nullable
@@ -1352,13 +1427,14 @@ public class LottieDrawable extends Drawable implements Drawable.Callback, Anima
       float scaleY = bounds.height() / (float) composition.getBounds().height();
 
       renderingMatrix.preScale(scaleX, scaleY);
+      renderingMatrix.preTranslate(bounds.left, bounds.top);
     }
     compositionLayer.draw(canvas, renderingMatrix, alpha);
   }
 
   /**
    * Software accelerated render path.
-   *
+   * <p>
    * This draws the animation to an internally managed bitmap and then draws the bitmap to the original canvas.
    *
    * @see LottieAnimationView#setRenderMode(RenderMode)

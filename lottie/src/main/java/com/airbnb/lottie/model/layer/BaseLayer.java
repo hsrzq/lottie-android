@@ -55,7 +55,7 @@ public abstract class BaseLayer
       CompositionLayer compositionLayer, Layer layerModel, LottieDrawable drawable, LottieComposition composition) {
     switch (layerModel.getLayerType()) {
       case SHAPE:
-        return new ShapeLayer(drawable, layerModel, compositionLayer);
+        return new ShapeLayer(drawable, layerModel, compositionLayer, composition);
       case PRE_COMP:
         return new CompositionLayer(drawable, layerModel,
             composition.getPrecomps(layerModel.getRefId()), composition);
@@ -241,9 +241,18 @@ public abstract class BaseLayer
       matrix.preConcat(parentLayers.get(i).transform.getMatrix());
     }
     L.endSection("Layer#parentMatrix");
-    int opacity = transform.getOpacity() == null ? 100 : transform.getOpacity().getValue();
-    int alpha = (int)
-        ((parentAlpha / 255f * (float) opacity / 100f) * 255);
+    // It is unclear why but getting the opacity here would sometimes NPE.
+    // The extra code here is designed to avoid this.
+    // https://github.com/airbnb/lottie-android/issues/2083
+    int opacity = 100;
+    BaseKeyframeAnimation<?, Integer> opacityAnimation = transform.getOpacity();
+    if (opacityAnimation != null) {
+      Integer opacityValue = opacityAnimation.getValue();
+      if (opacityValue != null) {
+        opacity = opacityValue;
+      }
+    }
+    int alpha = (int) ((parentAlpha / 255f * (float) opacity / 100f) * 255);
     if (!hasMatteOnThisLayer() && !hasMasksOnThisLayer()) {
       matrix.preConcat(transform.getMatrix());
       L.beginSection("Layer#drawLayer");

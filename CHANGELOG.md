@@ -1,3 +1,29 @@
+# 6.0.0
+### New Features
+* Major overhaul of text layout. Text layout should be more consistent across the board ([#2162](https://github.com/airbnb/lottie-android/pull/2162))
+* Allow animations in zip files to contain embedded base64 encoded images ([#2110](https://github.com/airbnb/lottie-android/pull/2110))
+* Allow zip files to contain embedded fonts. Context was added to some LottieCompositionFactory APIs to support this ([#2102](https://github.com/airbnb/lottie-android/pull/2102))
+* Add fontStyle and fontName as parameters in new overloads in FontAssetDelegate ([#2103](https://github.com/airbnb/lottie-android/pull/2103))
+* Allow decimal values for precomp size ([#2138](https://github.com/airbnb/lottie-android/pull/2138))
+* Allow interpolating in between gradients that have different numbers of opacity stops ([#2160](https://github.com/airbnb/lottie-android/pull/2160))
+* Support box position in document data ([#2139](https://github.com/airbnb/lottie-android/pull/2139))
+* Allow repeater contents to be the target of dynamic properties ([#2164](https://github.com/airbnb/lottie-android/pull/2164))
+* Provide a global LottieTask listener to aid in Espresso idle resources ([#2161](https://github.com/airbnb/lottie-android/pull/2161))
+* Allow setting a default font extension ([#2166](https://github.com/airbnb/lottie-android/pull/2166))
+* Add an option to completely disable Lottie's network cache ([#2158](https://github.com/airbnb/lottie-android/pull/2158))
+* Allow setting a font map for custom fonts ([#2180](https://github.com/airbnb/lottie-android/pull/2180))
+* Allow ImageAssetDelegate to be used when a drawable doesn't have a callback ([#2183](https://github.com/airbnb/lottie-android/pull/2072))
+* Make Layer name and refId public ([#2188](https://github.com/airbnb/lottie-android/pull/2188))
+* Allow rendering at the composition frame rate ([#2184](https://github.com/airbnb/lottie-android/pull/2184))
+### Bugs Fixed
+* Fixed an NPE when decoding an invalid bitmap and for transform opacity, and transform anchor position ([#2117](https://github.com/airbnb/lottie-android/pull/2117), [#2179](https://github.com/airbnb/lottie-android/pull/2179), and [#2197](https://github.com/airbnb/lottie-android/pull/2197))
+* Only store application context in ImageAssetManager ([#2163](https://github.com/airbnb/lottie-android/pull/2163))
+* Prevent rounded corner effects from trying to round a shape that has control points on its vertices already ([#2165](https://github.com/airbnb/lottie-android/pull/2165))
+* Pass LottieComposition directly while building layers to avoid race conditions ([#2167](https://github.com/airbnb/lottie-android/pull/2167))
+* Allow progress to be restored from saved state ([#2072](https://github.com/airbnb/lottie-android/pull/2072))
+* Take top and left Drawable bounds into account to support things like SeekBar thumbs ([#2182](https://github.com/airbnb/lottie-android/pull/2182))
+* Use the correct cache key for network animations ([#2198](https://github.com/airbnb/lottie-android/pull/2198))
+
 # 5.2.0
 ### Bugs Fixed
 * De-dupe gradient stops. On pre-Oreo devices, if you had color and opacity stops in the same place and used hardware acceleration, you may have seen artifacts at the stop positions as of 5.1.1 [#20814](https://github.com/airbnb/lottie-android/pull/2081)
